@@ -72,6 +72,10 @@ custom_name_map = {
 
 ---
 
+## 📦 Download
+
+[![Download](https://img.shields.io/badge/Download%20ZIP-v1.1.1-blue?logo=github)](https://github.com/Jocioi/eBird-ChinaBird-Converter/releases/download/v1.1/eBird-ChinaBird-Converter_v1.1.1.zip)
+
 ## 📝 License
 
 MIT © 2025 **Joc**  

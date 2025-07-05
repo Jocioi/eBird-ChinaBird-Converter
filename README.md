@@ -8,7 +8,7 @@ Convert eBird export tables into the China Bird List format in one command.
 ## ✨ Features  |  功能亮点
 | EN | 中文 |
 |----|------|
-| ✔  Auto-map *Whiskered Tern* (`须浮鸥`) → *White-winged Tern* (`灰翅浮鸥`) | ✔  自动将 **须浮鸥** 重命名为 **灰翅浮鸥** |
+| ✔  Auto‑adapt species name changes (e.g. `金斑鸻` → `金鸻`, `须浮鸥` → `灰翅浮鸥`) for smooth import to the Chinese Bird Records Center | ✔  可自动适配部分鸟种名称变化（如 eBird 中 **金斑鸻** → **金鸻**、**须浮鸥** → **灰翅浮鸥**），方便导入中国观鸟中心 |
 | ✔  Custom species name mapping (easily extendable) | ✔  内置 **自定义物种映射表**，可按需扩展 |
 | ✔  Drop rows containing “未识别” (“Unidentified”) automatically | ✔  自动删除 “**未识别**” 记录 |
 | ✔  Simple CLI – run with one command | ✔  命令行一键运行，零配置 |

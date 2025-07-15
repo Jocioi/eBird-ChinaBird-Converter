@@ -2,10 +2,12 @@
 
 > ⚠️ 本工具仅支持 macOS 系统。This tool is macOS only.
 
-将 eBird 导出表一键转换为中国鸟类名录格式的工具  
-Convert eBird export tables into the China Bird List format in one command.
+将 eBird 导出的文件一键转换为中国观鸟中心可导入格式的工具。  
+One-click converter from eBird exports to China Bird Records Center format.
 
 ---
+
+
 
 ## ✨ Features  |  功能亮点
 | EN | 中文 |
@@ -21,7 +23,7 @@ Convert eBird export tables into the China Bird List format in one command.
 ## 🚀 Quick Start  |  快速上手
 
 ### 1️⃣ 📦 Download the tool | 下载转换工具
-[![Download](https://img.shields.io/badge/Download%20ZIP-v1.1.1-blue?logo=github)](https://github.com/Jocioi/eBird-ChinaBird-Converter/releases/download/v1.1/eBird-ChinaBird-Converter_v1.1.1.zip)
+[![Download](https://img.shields.io/badge/Download%20ZIP-v1.2-blue?logo=github)](https://github.com/Jocioi/eBird-ChinaBird-Converter/releases/download/v1.2/eBird-ChinaBird-Converter_v1.2.zip)
 
 点击上方按钮下载压缩包并解压。  
 Click the button above to download the `.zip` package and unzip it.
@@ -42,7 +44,7 @@ Put the downloaded `*_observations.csv` (or .tsv) into the unzipped converter fo
 
 ### 4️⃣ 🖱️ Double-click to convert  
 双击 `2-双击出奇迹.command`（macOS）或运行同名脚本，程序会自动生成 `YYYYMMDD-地点-鸟种数量.xlsx`。  
-Double-click `2-双击出奇迹.command` to generate an Excel file like `20250705-太子尖-18.xlsx`.
+Double-click 2-双击出奇迹.command on macOS to generate an Excel file like 2025070-太子尖-18.xlsx.
 
 ---
 
@@ -66,3 +68,16 @@ Pull requests are welcome! Feel free to open an issue for:
 - documentation / translation improvements  
 
 Happy birding! 🐤
+
+---
+
+## 📌 Changelog
+
+### v1.2 (2025-07-15)
+- ✅ 提供自动安装依赖的 `.command` 脚本（国内源加速）
+- ✅ 文件名支持自动清理非法字符（如 `/`）
+- ✅ 支持输出格式为：日期‑地点‑鸟种数.xlsx
+- ✅ 终端新增导入与清理提示，提升用户体验
+
+
+---

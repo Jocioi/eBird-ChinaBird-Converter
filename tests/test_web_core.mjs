@@ -12,8 +12,8 @@ const fixture = (rows = [row], headers = header, delimiter = ',', bom = false) =
 const cases = [];
 function check(text, valid = true, mappings) {
   cases.push({text, valid, mappings});
-  if (valid) return core.parseRecords(text, mappings);
-  assert.throws(() => core.parseRecords(text, mappings));
+  if (valid) return core.parseRecords(text, mappings, {xCount:null});
+  assert.throws(() => core.parseRecords(text, mappings, {xCount:null}));
 }
 for (const delimiter of [',','\t',';']) for (const bom of [false,true]) {
   const out = check(fixture(undefined, undefined, delimiter, bom));
@@ -61,6 +61,16 @@ assert.equal(core.filename(check(fixture()),2), '20261107-测试地点-1-2.xlsx'
 const formula = {records:[{name:'=HYPERLINK("https://invalid")',count:null}], hasCount:true};
 const exports = [check(fixture()), noCount, check(fixture([[row[0],'X',row[2],row[3]]])), formula];
 for (const out of exports) assert.ok(core.buildXlsx(out) instanceof Uint8Array);
+// Web v2 deliberately estimates X by default; blank and numeric inputs are untouched.
+const xFixture=fixture([['金斑鸻','X',row[2],row[3]],['灰斑鸻','x',row[2],row[3]],['麻雀','',row[2],row[3]],['喜鹊','7',row[2],row[3]]]);
+const xDefault=core.parseRecords(xFixture);assert.deepEqual(xDefault.records.map(r=>r.count),[1,1,null,7]);
+assert.equal(xDefault.estimated,2);assert.equal(xDefault.xRows,2);assert.equal(xDefault.blankRows,1);assert.equal(xDefault.unknown,3);assert.equal(xDefault.records[0].estimatedCount,true);
+const xCustom=core.parseRecords(xFixture,undefined,{xCount:25});assert.deepEqual(xCustom.records.map(r=>r.count),[25,25,null,7]);
+const xBlank=core.parseRecords(xFixture,undefined,{xCount:null});assert.deepEqual(xBlank.records.map(r=>r.count),[null,null,null,7]);assert.equal(xBlank.estimated,0);
+assert.equal(core.parseRecords(xFixture,undefined,{xCount:999999999999999}).records[0].count,999999999999999);
+for(const xCount of [0,-1,1.5,1000000000000000,Infinity,NaN,'1','',true]) assert.throws(()=>core.parseRecords(xFixture,undefined,{xCount}));
+for(const setting of [null,[],{},'bad']) assert.throws(()=>core.quantitySettings(setting));
+exports.push(xDefault,xCustom,xBlank);
 const archiveEntries = exports.map((r,i) => ({name:`合成清单-${i + 1}.xlsx`,data:core.buildXlsx(r)}));
 archiveEntries.push({name:'说明.txt',data:'合成测试，不含真实记录。'});
 const batchArchive = core.buildZip(archiveEntries);
@@ -72,10 +82,10 @@ assert.throws(() => core.buildZip([{name:'é.txt',data:''},{name:'e\u0301.txt',d
 assert.throws(() => core.buildZip([{name:'x.txt',data:{}}]));
 assert.throws(() => core.buildZip([{name:'长'.repeat(22000),data:''}]));
 if (process.env.PYTHON) {
-  const script = `import sys,json,tempfile,base64,io,zipfile\nfrom pathlib import Path\nsys.path.insert(0,sys.argv[1])\nimport ebird_converter as app\nfrom openpyxl import load_workbook\npayload=json.load(sys.stdin)\nfor i,case in enumerate(payload['cases']):\n app.CUSTOM_NAME_MAP=case.get('mappings',payload['defaults'])\n with tempfile.TemporaryDirectory() as tmp:\n  path=Path(tmp)/'synthetic.csv';path.write_bytes(case['text'].encode('utf-8'))\n  try:\n   result=app.read_records(path)\n  except Exception:\n   assert not case['valid'], ('Python rejected',i,case)\n  else:\n   assert case['valid'], ('Python accepted',i,case)\n   assert json.loads(json.dumps(result))==case['expected'], (i,result,case['expected'])\nfor data in payload['exports']:\n raw=base64.b64decode(data['bytes'])\n with zipfile.ZipFile(io.BytesIO(raw)) as z:\n  assert z.testzip() is None\n  assert b'<f>' not in z.read('xl/worksheets/sheet1.xml')\n wb=load_workbook(io.BytesIO(raw)); ws=wb.active\n assert ws.title=='导入数据'\n assert [list(r) for r in ws.values]==data['cells']\n assert ws['A1'].font.bold\n assert ws['A2'].data_type=='s'\n wb.close()\nwith zipfile.ZipFile(io.BytesIO(base64.b64decode(payload['batch']))) as z:\n assert z.testzip() is None\n assert z.namelist()==['合成清单-'+str(i+1)+'.xlsx' for i in range(4)]+['说明.txt']\n assert z.read('说明.txt').decode('utf-8')=='合成测试，不含真实记录。'\n for i, info in enumerate(z.infolist()):\n  assert info.flag_bits & 0x800\n  if info.filename.endswith('.xlsx'):\n   wb=load_workbook(io.BytesIO(z.read(info.filename)))\n   assert [list(r) for r in wb.active.values]==payload['exports'][i]['cells']\n   wb.close()\nprint('Python differential, ZIP batch, and openpyxl XLSX checks passed')`;
+  const script = `import sys,json,tempfile,base64,io,zipfile\nfrom pathlib import Path\nsys.path.insert(0,sys.argv[1])\nimport ebird_converter as app\nfrom openpyxl import load_workbook\npayload=json.load(sys.stdin)\nfor i,case in enumerate(payload['cases']):\n app.CUSTOM_NAME_MAP=case.get('mappings',payload['defaults'])\n with tempfile.TemporaryDirectory() as tmp:\n  path=Path(tmp)/'synthetic.csv';path.write_bytes(case['text'].encode('utf-8'))\n  try:\n   result=app.read_records(path)\n  except Exception:\n   assert not case['valid'], ('Python rejected',i,case)\n  else:\n   assert case['valid'], ('Python accepted',i,case)\n   assert json.loads(json.dumps(result))==case['expected'], (i,result,case['expected'])\nfor data in payload['exports']:\n raw=base64.b64decode(data['bytes'])\n with zipfile.ZipFile(io.BytesIO(raw)) as z:\n  assert z.testzip() is None\n  assert b'<f>' not in z.read('xl/worksheets/sheet1.xml')\n wb=load_workbook(io.BytesIO(raw)); ws=wb.active\n assert ws.title=='导入数据'\n assert [list(r) for r in ws.values]==data['cells']\n assert ws['A1'].font.bold\n assert ws['A2'].data_type=='s'\n wb.close()\nwith zipfile.ZipFile(io.BytesIO(base64.b64decode(payload['batch']))) as z:\n assert z.testzip() is None\n assert z.namelist()==['合成清单-'+str(i+1)+'.xlsx' for i in range(len(payload['exports']))]+['说明.txt']\n assert z.read('说明.txt').decode('utf-8')=='合成测试，不含真实记录。'\n for i, info in enumerate(z.infolist()):\n  assert info.flag_bits & 0x800\n  if info.filename.endswith('.xlsx'):\n   wb=load_workbook(io.BytesIO(z.read(info.filename)))\n   assert [list(r) for r in wb.active.values]==payload['exports'][i]['cells']\n   wb.close()\nprint('Python differential, ZIP batch, and openpyxl XLSX checks passed')`;
   const payload = {batch:Buffer.from(batchArchive).toString('base64'),defaults:core.DEFAULT_MAPPINGS,cases:cases.map(c => {
     if (!c.valid) return c;
-    const r = core.parseRecords(c.text,c.mappings);
+    const r = core.parseRecords(c.text,c.mappings,{xCount:null});
     return {...c,expected:[r.records.map(x => [x.name,x.count]),r.date,r.location,r.hasCount,r.skipped,r.unknown]};
   }),exports:exports.map(r => ({bytes:Buffer.from(core.buildXlsx(r)).toString('base64'),cells:[r.hasCount ? ['中文名','数量'] : ['中文名'],...r.records.map(x => r.hasCount ? [x.name,x.count] : [x.name])]}))};
   const p=spawnSync(process.env.PYTHON,['-c',script,fileURLToPath(new URL('..',import.meta.url))],{input:JSON.stringify(payload),encoding:'utf8'});

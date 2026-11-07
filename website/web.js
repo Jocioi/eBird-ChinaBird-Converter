@@ -9,6 +9,7 @@
   let activeRules = Object.assign(Object.create(null), core.DEFAULT_MAPPINGS);
   let files = [], generation = 0, dirty = false;
   let confirmed = Object.create(null);
+  let activeQuantity = core.quantitySettings();
   const downloads = new Map();
   function node(tag, text, className) {
     const n = document.createElement(tag);
@@ -22,7 +23,7 @@
   function clearResults() { generation++; $('results').replaceChildren(); $('batch-download').replaceChildren(); $('batch-download').hidden = true; }
   function setDirty() {
     dirty = true; clearResults();
-    status('mapping-status', '规则有修改，点击“应用规则并检查文件”后再下载。');
+    status('mapping-status', '规则或数量设置有修改，点击“应用规则并检查文件”后再下载。');
     if (files.length) status('batch-status', '旧预览已失效。请应用当前规则，重新检查。');
   }
   function row(from, to) {
@@ -67,14 +68,26 @@
     }
     return validateRules(result);
   }
+  function drawQuantity(settings) {
+    $('x-mode').value = settings.xCount === null ? 'blank' : 'estimate';
+    $('x-value').value = String(settings.xCount === null ? 1 : settings.xCount);
+    $('x-value').disabled = settings.xCount === null;
+  }
+  function readQuantity() {
+    if ($('x-mode').value === 'blank') return core.quantitySettings({xCount:null});
+    const text = $('x-value').value.trim();
+    if (!/^[0-9]+$/.test(text)) throw Error('X 估算数量须为正整数，不可留空、小数或公式。');
+    return core.quantitySettings({xCount:Number(text)});
+  }
   function persist() {
     const remembered = Object.entries(confirmed);
     if (remembered.length > 20000) confirmed = Object.assign(Object.create(null), Object.fromEntries(remembered.slice(-20000)));
-    localStorage.setItem(STORE, JSON.stringify({version:1,mappings:activeRules,confirmed}));
+    localStorage.setItem(STORE, JSON.stringify({version:1,mappings:activeRules,confirmed,quantitySettings:activeQuantity}));
   }
   function acceptRules() {
-    activeRules = readRules(); dirty = false;
-    try {persist(); status('mapping-status', '已应用并自动保存 ' + Object.keys(activeRules).length + ' 条规则，下次打开会自动恢复。');}
+    const rules = readRules(), quantity = readQuantity();
+    activeRules = rules; activeQuantity = quantity; dirty = false;
+    try {persist(); status('mapping-status', '已应用并自动保存 ' + Object.keys(activeRules).length + ' 条规则及数量设置，下次打开会自动恢复。');}
     catch(e) {status('mapping-status', '规则已应用，但此浏览器无法保存。请导出 JSON 备份，下次需重新导入。', true);}
   }
   function saveBlob(data, name, type) {
@@ -95,7 +108,8 @@
     const retained = result.records.length - mapped.length;
     card.append(node('p', mapped.length + ' 种使用名称对应，' + retained + ' 种原样保留。未命中规则不代表已获目标平台认可；请核对全部输出。', 'notice'));
     if (result.skipped) card.append(node('p', '已跳过 ' + result.skipped + ' 条含“未识别”的记录。', 'notice'));
-    if (result.unknown) card.append(node('p', result.unknown + ' 条 X / 空数量保持空白，未改成 0 或 1。导入前必须核对或补充。', 'notice'));
+    if (result.xRows) card.append(node('p', result.xRows + ' 条 X 表示未知数量；' + (result.estimated ? '已按当前设置估算为每条 ' + result.xReplacement + '，不是原始实测数量。' : '按当前设置保留为空白。') + '请逐项核对后再导入。', 'notice'));
+    if (result.blankRows) card.append(node('p', result.blankRows + ' 条原始空数量仍为空白，不应用 X 估算值；导入前必须核对或补充。', 'notice'));
     if (!result.hasCount) card.append(node('p', '缺少数量列，本文件仅输出中文名；目标平台可能拒绝导入。请先核对数量要求。', 'notice'));
     const wrap = node('div', undefined, 'preview-wrap'), table = node('table', undefined, 'preview');
     const head = node('thead'), hr = node('tr');
@@ -103,7 +117,7 @@
     const body = node('tbody');
     // The entire conversion stays in memory; large previews are capped to protect rendering.
     result.records.slice(0, 300).forEach(record => {
-      const tr = node('tr'); tr.append(node('td', record.rawName), node('td', record.name), node('td', !result.hasCount ? '无数量列' : record.count === null ? '空白（需核对）' : String(record.count)));
+      const tr = node('tr'); tr.append(node('td', record.rawName), node('td', record.name), node('td', !result.hasCount ? '无数量列' : record.count === null ? '空白（需核对）' : String(record.count) + (record.estimatedCount ? '（X 估算）' : '')));
       const hasRule = Object.prototype.hasOwnProperty.call(activeRules, record.sourceName);
       const remembered = confirmed[record.sourceName] === record.name;
       const label = remembered ? '已记住此对应' : hasRule ? core.DEFAULT_MAPPINGS[record.sourceName] === activeRules[record.sourceName] ? '经验对应 · 待核对' : '自定义对应 · 待核对' : '原样保留 · 未验证';
@@ -114,7 +128,7 @@
     const allRemembered = result.records.every(r => confirmed[r.sourceName] === r.name);
     const label = node('label', undefined, 'review-label'), checked = document.createElement('input'); checked.type = 'checkbox';
     checked.checked = allRemembered && result.hasCount && !result.unknown; 
-    label.append(checked, node('span', allRemembered ? '本次含未知或缺失数量，我会在导入前按目标平台要求核对补充。' : '我已核对本次新增或修改的鸟名对应，并会在导入前检查数量。记住这些对应。'));
+    label.append(checked, node('span', allRemembered ? '本次含 X 估算、未知或缺失数量，我会在导入前按目标平台要求核对补充。' : '我已核对本次新增或修改的鸟名对应，并会在导入前检查数量。记住这些对应。'));
     label.hidden = allRemembered && result.hasCount && !result.unknown;
     const download = node('button', '下载 Excel (.xlsx)', 'primary'); download.type = 'button'; download.disabled = !checked.checked;
     if (allRemembered) card.append(node('p', '本清单的鸟名对应已记住，无需重新选择。' + (result.unknown || !result.hasCount ? '本次数量仍需确认。' : '下载前仍请检查本次数量与清单。'), 'hint'));
@@ -147,7 +161,7 @@
         if (file.size > MAX_FILE) throw Error('文件超过 5 MB，请拆分为单次清单或使用下载版。');
         const bytes = await file.arrayBuffer();
         if (token !== generation) return;
-        const parsed = core.parseRecords(core.decodeUtf8(new Uint8Array(bytes)), activeRules);
+        const parsed = core.parseRecords(core.decodeUtf8(new Uint8Array(bytes)), activeRules, activeQuantity);
         renderResult(file, parsed, null, token); outcomes.push({file, result:parsed}); ok++;
       } catch (e) { if (token !== generation) return; renderResult(file, null, e, token); outcomes.push({file, error:e.message}); failed++; }
       await new Promise(resolve => setTimeout(resolve, 0));
@@ -177,7 +191,7 @@
           const r = item.result, base = core.filename(r), n = (names.get(base) || 0) + 1; names.set(base, n);
           const name = n === 1 ? base : base.replace(/\.xlsx$/, '-' + n + '.xlsx');
           entries.push({name,data:core.buildXlsx(r)});
-          report.push('成功 | ' + item.file.name + ' → ' + name + ' | 跳过未识别 ' + r.skipped + '；未知数量 ' + r.unknown + (r.hasCount ? '' : '；缺少数量列'));
+          report.push('成功 | ' + item.file.name + ' → ' + name + ' | 跳过未识别 ' + r.skipped + '；原始 X ' + r.xRows + '（' + (r.xReplacement === null ? '保留为空' : '每条估算为 ' + r.xReplacement) + '）；原始空数量 ' + r.blankRows + (r.hasCount ? '' : '；缺少数量列'));
           await new Promise(resolve => setTimeout(resolve, 0));
         }
         if (token !== generation || dirty) return;
@@ -197,16 +211,18 @@
     if (list.length > 50) { files = []; status('batch-status', '一次最多 50 个文件，请减少后重试。', true); return; }
     files = [...list]; processFiles();
   }
+  $('x-mode').addEventListener('change', () => {$('x-value').disabled = $('x-mode').value === 'blank'; setDirty();});
+  $('x-value').addEventListener('input', setDirty);
   $('rule-search').addEventListener('input', filterRules);
   $('add-rule').addEventListener('click', () => {if ($('mapping-rows').children.length >= 500) {status('mapping-status','规则最多 500 条。',true); return;} const r = row('', ''); $('rule-search').value = ''; $('mapping-rows').append(r); updateCount(); setDirty(); r.querySelector('input').focus();});
   $('apply-rules').addEventListener('click', () => {try {acceptRules(); processFiles();} catch(e) {status('mapping-status', e.message, true);}});
   $('reset-rules').addEventListener('click', () => {drawRules(core.DEFAULT_MAPPINGS); setDirty(); status('mapping-status', '已恢复原 12 条，请应用。应用后会自动保存为原 12 条规则。');});
-  $('save-rules').addEventListener('click', () => {try {const rules = readRules(); localStorage.setItem(STORE, JSON.stringify({version:1,mappings:rules,confirmed})); status('mapping-status', '已将当前规则保存到此浏览器。没有保存地点、日期或数量。' + (dirty ? '请应用规则后转换。' : ''));} catch(e) {status('mapping-status', '未保存：' + e.message, true);}});
-  $('forget-rules').addEventListener('click', () => {try {localStorage.removeItem(STORE); confirmed = Object.create(null); status('mapping-status', '已清除保存的规则与确认记录；当前页面仍保留编辑。再次应用或下载会重新记住。');} catch(e) {status('mapping-status','无法清除：' + e.message,true);}});
-  $('export-rules').addEventListener('click', () => {try {saveBlob(JSON.stringify({version:1,mappings:readRules(),confirmed}, null, 2), 'ebird-name-rules.json', 'application/json'); status('mapping-status','已发起规则下载，不含观鸟记录。');} catch(e) {status('mapping-status',e.message,true);}});
+  $('save-rules').addEventListener('click', () => {try {const rules = readRules(); localStorage.setItem(STORE, JSON.stringify({version:1,mappings:rules,confirmed,quantitySettings:readQuantity()})); status('mapping-status', '已将当前规则保存到此浏览器。仅保存规则、确认和 X 处理设置，不保存清单地点、日期或实测数量。' + (dirty ? '请应用规则后转换。' : ''));} catch(e) {status('mapping-status', '未保存：' + e.message, true);}});
+  $('forget-rules').addEventListener('click', () => {try {localStorage.removeItem(STORE); confirmed = Object.create(null); status('mapping-status', '已清除保存的规则、数量设置与确认记录；当前页面仍保留编辑。再次应用或下载会重新记住。');} catch(e) {status('mapping-status','无法清除：' + e.message,true);}});
+  $('export-rules').addEventListener('click', () => {try {saveBlob(JSON.stringify({version:1,mappings:readRules(),confirmed,quantitySettings:readQuantity()}, null, 2), 'ebird-name-rules.json', 'application/json'); status('mapping-status','已发起规则下载，不含观鸟记录。');} catch(e) {status('mapping-status',e.message,true);}});
   $('import-rules').addEventListener('change', async event => {
     const file = event.target.files[0]; if (!file) return;
-    try {if (file.size > 12 * 1024 * 1024) throw Error('规则文件不能超过 12 MB。'); const value = JSON.parse(core.decodeUtf8(new Uint8Array(await file.arrayBuffer()))); if (value.version !== undefined && value.version !== 1) throw Error('不支持此规则文件版本。'); const rules = validateRules(value.mappings === undefined ? value : value.mappings); confirmed = value.confirmed ? validateRules(value.confirmed, 20000) : Object.create(null); drawRules(rules); setDirty(); status('mapping-status','已导入规则。请检查并应用，之后会自动记住。');} catch(e) {status('mapping-status','导入失败：' + e.message,true);} finally {event.target.value = '';}
+    try {if (file.size > 12 * 1024 * 1024) throw Error('规则文件不能超过 12 MB。'); const value = JSON.parse(core.decodeUtf8(new Uint8Array(await file.arrayBuffer()))); if (value.version !== undefined && value.version !== 1) throw Error('不支持此规则文件版本。'); const rules = validateRules(value.mappings === undefined ? value : value.mappings); const nextConfirmed = value.confirmed ? validateRules(value.confirmed, 20000) : Object.create(null); const nextQuantity = core.quantitySettings(value.quantitySettings); confirmed = nextConfirmed; drawQuantity(nextQuantity); drawRules(rules); setDirty(); status('mapping-status','已导入规则。请检查并应用，之后会自动记住。');} catch(e) {status('mapping-status','导入失败：' + e.message,true);} finally {event.target.value = '';}
   });
   $('checklist-files').addEventListener('change', e => selectFiles(e.target.files));
   const zone = $('drop-zone');
@@ -215,7 +231,7 @@
   zone.addEventListener('drop', e => {e.preventDefault(); zone.classList.remove('dragging'); $('checklist-files').value = ''; selectFiles(e.dataTransfer.files);});
   $('demo').addEventListener('click', () => {$('checklist-files').value = ''; const csv = '鸟种,观察日期,地点,数量\n金斑鸻 Pacific Golden-Plover,2026-11-07,合成示例地点,3\n须浮鸥,2026-11-07,合成示例地点,X\n麻雀,2026-11-07,合成示例地点,5\n未识别鸟种,2026-11-07,合成示例地点,1\n'; selectFiles([new File([csv], '合成示例.csv', {type:'text/csv'})]);});
   $('clear-files').addEventListener('click', () => {files = []; $('checklist-files').value = ''; clearResults(); status('batch-status','已清空当前页面中的文件和预览。规则未改变。');});
-  try { const saved = localStorage.getItem(STORE); if (saved) {const parsed = JSON.parse(saved); if (parsed.version !== 1) throw Error('旧规则版本不支持'); activeRules = validateRules(parsed.mappings); confirmed = parsed.confirmed ? validateRules(parsed.confirmed, 20000) : Object.create(null); status('mapping-status','已加载你在此浏览器保存的规则，请检查是否仍适用。');} else status('mapping-status','当前使用原工具的 12 条手工经验规则；尚未保存到浏览器。'); }
-  catch(e) {activeRules = Object.assign(Object.create(null), core.DEFAULT_MAPPINGS); confirmed = Object.create(null); status('mapping-status','无法读取已保存规则，当前使用原 12 条。浏览器保存功能可能不可用。',true);}
-  drawRules(activeRules); $('web-app').hidden = false;
+  try { const saved = localStorage.getItem(STORE); if (saved) {const parsed = JSON.parse(saved); if (parsed.version !== 1) throw Error('旧规则版本不支持'); activeRules = validateRules(parsed.mappings); confirmed = parsed.confirmed ? validateRules(parsed.confirmed, 20000) : Object.create(null); activeQuantity = core.quantitySettings(parsed.quantitySettings); status('mapping-status','已加载你在此浏览器保存的规则，请检查是否仍适用。');} else status('mapping-status','当前使用原工具的 12 条手工经验规则；尚未保存到浏览器。'); }
+  catch(e) {activeRules = Object.assign(Object.create(null), core.DEFAULT_MAPPINGS); confirmed = Object.create(null); activeQuantity = core.quantitySettings(); status('mapping-status','无法读取已保存规则，当前使用原 12 条。浏览器保存功能可能不可用。',true);}
+  drawQuantity(activeQuantity); drawRules(activeRules); $('web-app').hidden = false;
 })();

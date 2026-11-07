@@ -114,4 +114,24 @@ await select(remembered,[file('金斑鸻'),file('灰斑鸻')]);await completed(r
 const canceledZip=setup();await select(canceledZip,[file('金斑鸻'),file('灰斑鸻')]);await completed(canceledZip);
 const cancelCheck=canceledZip.get('batch-download').querySelector('input[type="checkbox"]');cancelCheck.checked=true;await cancelCheck.fire('change');
 const zipPending=canceledZip.get('batch-download').querySelector('button').click();const cancelInput=canceledZip.get('mapping-rows').children[0].querySelectorAll('input')[1];cancelInput.value='测试鸟';await cancelInput.fire('input');await zipPending;assert.equal(canceledZip.blobs.length,0);assert.equal(canceledZip.get('batch-download').hidden,true);
-console.log('UI state tests passed: persistence, 501-species history, atomic fallback, blocked storage, mixed 50-file batch, cancellation, mapping invalidation, ZIP contents/collisions/failure report, search, large JSON round-trip, and remembered-name/unknown-count review.');
+// X estimates default to 1, stay visibly estimated, and require per-file review.
+const xFile=()=>new File(['鸟种,数量,观察日期,地点\n金斑鸻,X,2026-11-07,合成地点\n灰斑鸻,,2026-11-07,合成地点\n麻雀,7,2026-11-07,合成地点\n'],'x.csv');
+const quantity=setup();assert.equal(quantity.get('x-value').value,'1');assert.equal(quantity.get('x-mode').value,'estimate');
+await select(quantity,[xFile()]);await completed(quantity);await downloadFirst(quantity);
+let sheet=unzipStored(await quantity.blobs.at(-1).arrayBuffer()).get('xl/worksheets/sheet1.xml').toString('utf8');assert.match(sheet,/<c r="B2" t="n"><v>1<\/v>/);assert.ok(!sheet.includes('r="B3"'));assert.match(sheet,/<c r="B4" t="n"><v>7<\/v>/);
+quantity.get('x-value').value='25';await quantity.get('x-value').fire('input');assert.equal(quantity.get('results').children.length,0);
+await quantity.get('apply-rules').click();await completed(quantity);assert.equal(JSON.parse(quantity.storage.get(STORE)).quantitySettings.xCount,25);await downloadFirst(quantity);
+sheet=unzipStored(await quantity.blobs.at(-1).arrayBuffer()).get('xl/worksheets/sheet1.xml').toString('utf8');assert.match(sheet,/<c r="B2" t="n"><v>25<\/v>/);assert.ok(!sheet.includes('r="B3"'));
+const quantityReload=setup(quantity.storage.get(STORE));assert.equal(quantityReload.get('x-value').value,'25');await select(quantityReload,[xFile()]);await completed(quantityReload);assert.equal(quantityReload.get('results').children[0].querySelector('button').disabled,true);
+// ZIP and individual exports share exactly the same selected estimate.
+await select(quantity,[xFile(),file('喜鹊')]);await completed(quantity);let xCheck=quantity.get('batch-download').querySelector('input[type="checkbox"]');xCheck.checked=true;await xCheck.fire('change');await quantity.get('batch-download').querySelector('button').click();
+let xZip=unzipStored(await quantity.blobs.at(-1).arrayBuffer());sheet=unzipStored(xZip.get('20261107-合成地点-3.xlsx')).get('xl/worksheets/sheet1.xml').toString('utf8');assert.match(sheet,/<c r="B2" t="n"><v>25<\/v>/);assert.match(xZip.get('处理报告.txt').toString('utf8'),/每条估算为 25/);
+// Blank mode remains blank through persistence and JSON export/import.
+quantity.get('x-mode').value='blank';await quantity.get('x-mode').fire('change');assert.equal(quantity.get('x-value').disabled,true);assert.equal(quantity.get('batch-download').hidden,true);await quantity.get('apply-rules').click();await completed(quantity);await downloadFirst(quantity);
+sheet=unzipStored(await quantity.blobs.at(-1).arrayBuffer()).get('xl/worksheets/sheet1.xml').toString('utf8');assert.ok(!sheet.includes('r="B2"'));assert.ok(!sheet.includes('r="B3"'));
+await quantity.get('export-rules').click();const quantityImport=setup();quantityImport.get('import-rules').files=[new File([quantity.blobs.at(-1)],'rules.json')];await quantityImport.get('import-rules').fire('change');assert.equal(quantityImport.get('x-mode').value,'blank');await quantityImport.get('apply-rules').click();assert.equal(JSON.parse(quantityImport.storage.get(STORE)).quantitySettings.xCount,null);
+// Legacy backups have no setting and use new default 1; malformed settings fail atomically.
+quantityImport.get('import-rules').files=[new File([JSON.stringify({version:1,mappings:{'金斑鸻':'金鸻'}})],'old.json')];await quantityImport.get('import-rules').fire('change');assert.equal(quantityImport.get('x-value').value,'1');assert.equal(quantityImport.get('x-mode').value,'estimate');
+for(const bad of ['0','-1','1.5','1000000000000000','=1+2','']) {quantityImport.get('x-value').value=bad;await quantityImport.get('x-value').fire('input');await quantityImport.get('apply-rules').click();assert.match(quantityImport.get('mapping-status').textContent,/正整数|整数/);}
+const invalidQuantity=setup({version:1,mappings:{'金斑鸻':'测试鸟'},confirmed:{},quantitySettings:{xCount:0}});assert.equal(invalidQuantity.get('mapping-rows').children.length,12);assert.equal(invalidQuantity.get('x-value').value,'1');
+console.log('UI state tests passed, including X default/custom/blank settings, persistence, legacy JSON, invalid settings, review gating, and individual/ZIP consistency.');

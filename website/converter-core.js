@@ -56,7 +56,14 @@
     }
     throw new Error(`无效或不明确的观察日期：${text}；请使用 YYYY-MM-DD`);
   }
-  function parseRecords(input, mappings = DEFAULT_MAPPINGS) {
+  function quantitySettings(value = {xCount: 1}) {
+    if (!value || typeof value !== 'object' || Array.isArray(value) || !Object.prototype.hasOwnProperty.call(value, 'xCount')) throw new Error('X 数量设置无效');
+    const count = value.xCount;
+    if (count !== null && (!Number.isSafeInteger(count) || count < 1 || count > 999999999999999)) throw new Error('X 估算数量须为 1 至 999999999999999 的整数，或选择保留为空');
+    return {xCount: count};
+  }
+  function parseRecords(input, mappings = DEFAULT_MAPPINGS, settings) {
+    const xReplacement = quantitySettings(settings).xCount;
     if (typeof input !== 'string') throw new Error('请传入 UTF-8 解码后的文本');
     const text = input.replace(/^\uFEFF/u, '');
     const first = text.split(/\r\n|\r|\n/u, 1)[0];
@@ -72,7 +79,7 @@
     for (const [source, target] of Object.entries(mappings)) {
       if (!chineseName.test(source) || typeof target !== 'string' || !chineseName.test(target)) throw new Error('映射的原名和目标名必须为完整中文鸟名，不可留空');
     }
-    const records = [], hasCount = headers.includes('数量'); let group, date, location, skipped = 0, unknown = 0;
+    const records = [], hasCount = headers.includes('数量'); let group, date, location, skipped = 0, unknown = 0, xRows = 0, blankRows = 0, estimated = 0;
     for (const {values, line} of rows) {
       if (!values.some(value => trim(value))) continue;
       if (values.length !== headers.length) throw new Error(`第 ${line} 行列数与表头不一致`);
@@ -91,20 +98,23 @@
       const sourceName = rawName.split(/[\s\x1c-\x1f（(\[]/u, 1)[0];
       if (!chineseName.test(sourceName)) throw new Error(`第 ${line} 行鸟种必须为中文名称；英文、混合种或不确定鸟种需人工核对`);
       const name = Object.prototype.hasOwnProperty.call(mappings, sourceName) ? mappings[sourceName] : sourceName;
-      let count = null;
+      let count = null, estimatedCount = false;
       if (hasCount) {
         const value = row['数量'];
-        if (!value || value.toUpperCase() === 'X') unknown++;
+        if (!value) { unknown++; blankRows++; }
+        else if (value.toUpperCase() === 'X') { unknown++; xRows++; count = xReplacement; if (count !== null) { estimated++; estimatedCount = true; } }
         else if (/^[0-9]+$/u.test(value) && Number(value) > 0) {
           count = Number(value);
           if (count > 999999999999999) throw new Error('数量超过 Excel 可精确保存的整数范围');
         } else throw new Error(`第 ${line} 行数量无效：${value}`);
       }
-      records.push({name, count, rawName, sourceName, line});
+      const record = {name, count, rawName, sourceName, line};
+      if (estimatedCount) record.estimatedCount = true;
+      records.push(record);
     }
     if (!records.length) throw new Error('没有可导出的鸟种记录');
     if (new Set(records.map(r => r.name)).size !== records.length) throw new Error('鸟种名称重复（或映射后重复）；请人工核对单次清单，不自动合并数量');
-    return {records, date, location, hasCount, skipped, unknown};
+    return {records, date, location, hasCount, skipped, unknown, xRows, blankRows, estimated, xReplacement};
   }
   function sanitizeLocation(value) {
     const cleaned = value.replace(/[\\/:*?"<>|\x00-\x1f]/gu, '-').replace(/^[ .]+|[ .]+$/gu, '');
@@ -181,5 +191,5 @@
       ['xl/worksheets/sheet1.xml', declaration + sheet]
     ]);
   }
-  return Object.freeze({DEFAULT_MAPPINGS, decodeUtf8, parseRecords, parseDate, sanitizeLocation, filename, buildXlsx, buildZip});
+  return Object.freeze({DEFAULT_MAPPINGS, quantitySettings, decodeUtf8, parseRecords, parseDate, sanitizeLocation, filename, buildXlsx, buildZip});
 });

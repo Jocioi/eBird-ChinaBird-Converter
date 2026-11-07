@@ -4,3 +4,5 @@
 .file-button:has(+ input:focus-visible){outline:3px solid #778c2c;outline-offset:3px}
 
 .search-toolbar label{font-size:13px}.search-toolbar input{font:inherit;font-size:14px;padding:10px 12px;border:1px solid #b8c1a7;border-radius:4px;background:white;min-width:180px;flex:1}.converter #rules{scroll-margin-top:20px}
+
+.map-head small{display:block;font-size:11px;font-weight:400;line-height:1.5;margin-top:3px;overflow-wrap:anywhere}

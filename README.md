@@ -1,83 +1,80 @@
-# eBird-to-China Bird List Converter 🐦
+# eBird → 中国观鸟记录中心转换工具
 
-> ⚠️ 本工具仅支持 macOS 系统。This tool is macOS only.
+**v1.5.1** · Joc · Python 3.9+ · 本地处理 · MIT
 
-将 eBird 导出的文件一键转换为中国观鸟中心可导入格式的工具。  
-One-click converter from eBird exports to China Bird Records Center format.
+把包含中文鸟种名称的单次观鸟清单 CSV / TSV 整理成 XLSX，供人工检查后尝试导入中国观鸟记录中心。基于本地 v1.5 openpyxl 轻量版整理。
 
----
+- [使用说明与下载](https://uioiu.com/ebird/)
+- [下载 v1.5.1 ZIP](https://uioiu.com/ebird/downloads/eBird-ChinaBird-Converter-v1.5.1.zip)
+- [源码](https://github.com/Jocioi/eBird-ChinaBird-Converter)
 
+这是个人辅助工具，**不是 eBird 或中国观鸟记录中心的官方工具**。内置名称映射只覆盖部分旧名称，不代表完整或最新分类体系，也不保证平台接受导入。转换不会联网、上传或修改原始记录；上传由你在目标网站手动完成。
 
+## macOS 快速使用
 
-## ✨ Features  |  功能亮点
-| EN | 中文 |
-|----|------|
-| ✔  Auto-adapt species name changes (e.g. `金斑鸻` → `金鸻`, `须浮鸥` → `灰翅浮鸥`) for smooth import to the Chinese Bird Records Center | ✔  可自动适配部分鸟种名称变化（如 eBird 中 **金斑鸻** → **金鸻**、**须浮鸥** → **灰翅浮鸥**），方便导入中国观鸟中心 |
-| ✔  Custom species name mapping (easily extendable) | ✔  内置 **自定义物种映射表**，可按需扩展 |
-| ✔  Drop rows containing “未识别” (“Unidentified”) automatically | ✔  自动删除 “**未识别**” 记录 |
-| ✔  Simple CLI – run with one command | ✔  命令行一键运行，零配置 |
-| ✔  UTF-8 friendly, reads CSV/TSV exported from eBird | ✔  UTF-8 兼容，直接读取 eBird 导出的 CSV/TSV |
+1. 安装 Python 3.9 或以上（推荐仍获安全维护的版本），可从 [python.org](https://www.python.org/downloads/macos/) 获取。
+2. 下载并解压 ZIP。将**单次观鸟清单**的 CSV / TSV 放入解压目录。不要直接放入包含多次观鸟的历史总表。
+3. 双击 `双击转换.command`。首次运行会先询问是否从官方 PyPI 安装 openpyxl 及其依赖。输入 `y` 才会下载，依赖只装到该目录的 `.venv-ebird-chinabird`，不会改系统 Python。
+4. 在 `output` 中查看 `YYYYMMDD-地点-鸟种数.xlsx`。同名文件会增加 `-2`、`-3`，不会覆盖已有文件。
+5. 逐项核对鸟种和数量，再按[中国观鸟记录中心](https://www.birdreport.cn)当前模板要求手动导入。日期和地点只体现在文件名，需在平台核对或填写。
 
----
+若系统未直接打开 `.command`，可在终端进入解压目录后执行 `bash 双击转换.command`。不要关闭系统安全保护；仅运行你已确认来源的下载。
 
-## 🚀 Quick Start  |  快速上手
+## 输入要求与安全限制
 
-### 1️⃣ 📦 Download the tool | 下载转换工具
-[![Download](https://img.shields.io/badge/Download%20ZIP-v1.2-blue?logo=github)](https://github.com/Jocioi/eBird-ChinaBird-Converter/releases/download/v1.2/eBird-ChinaBird-Converter_v1.2.zip)
+支持 UTF-8（含 BOM），逗号、制表符或分号分隔。`.csv` 和 `.tsv` 均可自动扫描。当前版本**要求中文表头、中文鸟种名称**，不会自动翻译英文 eBird 导出。需要将导出按单次清单整理，并核对以下字段：
 
-点击上方按钮下载压缩包并解压。  
-Click the button above to download the `.zip` package and unzip it.
+| 列名 | 要求 |
+| --- | --- |
+| 鸟种 | 必填；中文名后可有空格英文名、括号注释。含“未识别”的行会跳过并计数 |
+| 观察日期 | 必填；`YYYY-MM-DD`、`YYYY/MM/DD` 或 `YYYY.MM.DD`，可带 `HH:MM:SS` |
+| 地点 | 必填，文件内须完全一致 |
+| 数量 | 可选；正整数；`X` 或空白保持为空白并提示人工核对，不会变成 0 或 1 |
 
----
+同一文件只允许一个日期、一个地点；如存在 `Submission ID` 或 `开始时间` 列，各列也必须为同一值。同日同地点多次清单如没有不同的 ID 或开始时间仍无法可靠识别，因此**请自行保证每个文件只包含一次观鸟清单**。不自动拆分、不自动合并或求和。
 
-### 2️⃣ 🐦 Export your eBird data | 导出 eBird 记录
-登录 [eBird.org](https://ebird.org) → **My eBird** → **Download My Data**，系统会通过邮件发送下载链接（CSV/TSV）。  
-Log in to eBird, navigate to **My eBird → Download My Data**, and download the observations file (CSV/TSV).
+空/重复表头、缺少必填列、列数错位、无效或含糊日期（如 `11/07/2026`）、英文鸟种、杂交或不确定名称、负数/小数数量、重复鸟种（含映射后重复）都会报错，当前文件不生成结果。请修正原始文件的副本后重试。空行会忽略；多文件批处理中一个文件失败不阻止其他文件，最终会明确报告成功/失败数量。
 
----
+没有数量列时仅输出中文名；存在 `X`、空数量或缺数量列时，必须人工补充/核对，目标平台可能拒绝导入。
 
-### 3️⃣ 📁 Place the eBird file into the tool folder  
-将下载得到的 `*_observations.csv`（或 .tsv）文件放入刚才解压的工具文件夹内。  
-Put the downloaded `*_observations.csv` (or .tsv) into the unzipped converter folder.
+## 命令行（macOS / Windows / Linux）
 
----
+Python 主程序跨平台；双击启动器仅适用于 macOS。以下为 macOS / Linux 示例：
 
-### 4️⃣ 🖱️ Double-click to convert  
-双击 `2-双击出奇迹.command`（macOS）或运行同名脚本，程序会自动生成 `YYYYMMDD-地点-鸟种数量.xlsx`。  
-Double-click 2-双击出奇迹.command on macOS to generate an Excel file like 2025070-太子尖-18.xlsx.
+```sh
+python3 -m venv .venv-ebird-chinabird
+.venv-ebird-chinabird/bin/python -m pip install --index-url https://pypi.org/simple -r requirements.txt
+.venv-ebird-chinabird/bin/python ebird_converter.py
+.venv-ebird-chinabird/bin/python ebird_converter.py my-list.csv other-list.tsv -o output
+.venv-ebird-chinabird/bin/python ebird_converter.py --version
+```
 
----
+Windows 使用 `py -3 -m venv .venv-ebird-chinabird` 创建环境，并将以上 Python 路径替换为 `.venv-ebird-chinabird\Scripts\python.exe`。Windows/Linux 未进行桌面实机测试。
 
-### 5️⃣ 📤 Import to 中国观鸟记录中心  
-登录 [中国观鸟记录中心](https://www.birdreport.cn) → “导入记录” → 选择刚生成的 `.xlsx` 文件并上传即可。  
-Log in to the Chinese Bird Records Center and import the generated `.xlsx` file via the “Import Records” function.
+退出码：全部成功 `0`；没有输入、缺少依赖、部分或全部失败 `1`；命令参数错误 `2`。命令行不会等待按键，适合批处理。依赖安装完成后可断网转换。
 
----
+## 鸟种映射
 
-## 📝 License
-MIT © 2025 **Joc**  
-Created with assistance from ChatGPT (OpenAI).
+保留 v1.5 的 12 条对应，仅做完整中文名称匹配：金斑鸻→金鸻、灰斑鸻→灰鸻、白冠燕尾→白额燕尾、须浮鸥→灰翅浮鸥、理氏鹨→田鹨、蒙古银鸥→西伯利亚银鸥、西方灰伯劳→西灰伯劳、西方毛脚燕→毛脚燕、亚洲短趾百灵→短趾百灵、亚洲漠地林莺→荒漠林莺、里海银鸥→黄腿银鸥、西方秧鸡→西秧鸡。
 
----
+映射可在 `ebird_converter.py` 的 `CUSTOM_NAME_MAP` 中人工调整。名称不在映射表中时原样保留，不代表该物种一定获目标平台认可。
 
-## 🤝 Contributing
-Pull requests are welcome! Feel free to open an issue for:
+## 测试与发布
 
-- bug fixes / feature requests  
-- new species mapping rules  
-- documentation / translation improvements  
+```sh
+.venv-ebird-chinabird/bin/python -m unittest discover -s tests -v
+```
 
-Happy birding! 🐤
+测试只使用临时生成的合成记录，不包含真实观鸟数据。发布包仅包含转换代码、启动器、依赖说明、文档、MIT 许可证与合成测试，不含 CSV、TSV、XLSX、虚拟环境或个人路径。
 
----
+## v1.5.1 更新
 
-## 📌 Changelog
+- 补齐 TSV 扫描、非交互 CLI、明确失败退出码。
+- 严格校验日期、表头、行结构、数量和单次清单，禁止静默使用今天日期。
+- 物种名称精确映射，重复种名不再静默保留；文本按文本写入，防止 Excel 公式执行。
+- 保留未知数量为空白并警告；输出独立目录且不覆盖。
+- macOS 首次安装明确确认，只用官方 PyPI 与独立环境。
 
-### v1.2 (2025-07-15)
-- ✅ 提供自动安装依赖的 `.command` 脚本（国内源加速）
-- ✅ 文件名支持自动清理非法字符（如 `/`）
-- ✅ 支持输出格式为：日期‑地点‑鸟种数.xlsx
-- ✅ 终端新增导入与清理提示，提升用户体验
+## 许可
 
-
----
+保留原项目 [MIT LICENSE](LICENSE)，© 2025 Joc。Created with assistance from ChatGPT (OpenAI).
